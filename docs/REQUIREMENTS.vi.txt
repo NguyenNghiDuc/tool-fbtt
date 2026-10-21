@@ -1,0 +1,85 @@
+Tool đăng video đa tài khoản Facebook và TikTok: danh sách chức năng A-Z
+Tài liệu mô tả toàn bộ chức năng của một tool đăng video hằng ngày lên Facebook (Fanpage) và TikTok, gắn link affiliate Shopee/TikTok Shop, chạy nhiều tài khoản cùng lúc. Phần đánh dấu [MVP] là phần cần có ở bản đầu tiên.
+1. Quản lý tài khoản (Profile)
+• [MVP] Thêm/sửa/xóa/tạm dừng profile: Fanpage Facebook, tài khoản TikTok.
+• [MVP] Kết nối bằng OAuth chính thức, mỗi profile lưu token riêng (mã hóa).
+• [MVP] Tự làm mới token, cảnh báo khi token sắp hết hạn hoặc bị thu hồi.
+• Nhóm profile theo ngách (thời trang, gia dụng, mẹ và bé...) để gán kho nội dung chung theo nhóm.
+• Phân quyền người dùng: admin, nhân viên chỉ xem hoặc chỉ đăng.
+• Ghi chú, nhãn màu, trạng thái từng tài khoản (hoạt động, lỗi, bị hạn chế).
+2. Kho video (Media Library)
+• [MVP] Upload video, hoặc thả vào thư mục để tool tự quét.
+• [MVP] Gán video cho profile hoặc nhóm profile, đánh dấu đã dùng/chưa dùng.
+• Kiểm tra tự động: định dạng, độ dài, dung lượng, tỉ lệ 9:16, độ phân giải theo yêu cầu từng nền tảng.
+• Tự tạo ảnh thumbnail, cắt/nén video bằng FFmpeg nếu vượt giới hạn.
+• Thêm intro/outro, logo hoặc watermark của chính bạn, chèn phụ đề.
+• Chống trùng lặp: cảnh báo khi cùng video bị gán cho nhiều tài khoản, vì cả hai nền tảng đều lọc nội dung trùng.
+• Nhập video từ Google Drive hoặc link tải.
+3. Quản lý sản phẩm và link affiliate
+• [MVP] Bảng sản phẩm: tên, giá, ảnh, link Shopee, link TikTok Shop, hoa hồng, ngách.
+• [MVP] Gán sản phẩm cho video (một video có thể có nhiều sản phẩm).
+• Nhập hàng loạt từ file CSV/Excel.
+• Tự tạo link rút gọn có tracking riêng cho từng profile và từng bài (UTM hoặc sub_id) để biết tài khoản nào ra đơn.
+• Kiểm tra link chết hoặc sản phẩm hết hàng, tự tạm ngưng bài dùng link đó.
+4. Bộ tạo caption và nội dung
+• [MVP] Mẫu caption có biến: {ten_san_pham}, {gia}, {link}, {hashtag}.
+• [MVP] Xoay vòng nhiều biến thể mẫu, hashtag, emoji để không bị lặp.
+• Kho hashtag theo ngách, tự chọn ngẫu nhiên một tập mỗi bài.
+• Gợi ý caption bằng AI (Claude API): nhập tên sản phẩm và điểm nổi bật, sinh ra 5-10 biến thể, bạn duyệt trước khi dùng.
+• Tự thêm dòng công khai quảng cáo/affiliate (ví dụ "#quảngcáo") để tuân thủ chính sách nền tảng.
+• Link đặt trong caption, hoặc tự đăng comment đầu tiên chứa link (Facebook).
+5. Lên lịch đăng
+• [MVP] Lịch theo profile: số video mỗi ngày, khung giờ, ngày trong tuần.
+• [MVP] Độ lệch ngẫu nhiên vài phút đến vài chục phút, không để nhiều tài khoản đăng cùng lúc.
+• [MVP] Hàng đợi: lấy video kế tiếp theo thứ tự hoặc ngẫu nhiên.
+• Lịch dạng lịch tháng/tuần, kéo thả đổi giờ.
+• "Giờ vàng" gợi ý dựa trên dữ liệu tương tác của chính tài khoản.
+• Tạm dừng khẩn cấp toàn hệ thống bằng một nút.
+• Chặn đăng khi hết video trong kho và báo trước khi kho cạn.
+6. Đăng bài (Publisher)
+• [MVP] Facebook: đăng Reels/video lên Fanpage qua Graph API.
+• [MVP] TikTok: đăng qua Content Posting API (chế độ riêng tư cho tới khi app được duyệt).
+• [MVP] Chạy song song nhiều profile bằng worker bất đồng bộ, lỗi một tài khoản không ảnh hưởng tài khoản khác.
+• [MVP] Tự thử lại khi lỗi mạng hoặc rate limit, có giới hạn số lần.
+• Giới hạn số bài tối đa mỗi ngày cho từng tài khoản (mặc định thấp, chỉnh được).
+• Chế độ "duyệt trước": tool soạn sẵn, bạn bấm đồng ý rồi mới đăng.
+• Gắn link sản phẩm TikTok Shop: API không hỗ trợ trực tiếp, tool sẽ nhắc bạn gắn thủ công và đánh dấu bài "chờ gắn link".
+7. Theo dõi và thống kê
+• [MVP] Nhật ký đăng: thành công, thất bại, lý do lỗi, thời gian.
+• Lấy số liệu từ API: lượt xem, like, comment, share cho từng bài.
+• Thống kê theo profile, theo sản phẩm, theo ngách, theo khung giờ.
+• Theo dõi click link rút gọn và đơn hàng (nhập thủ công hoặc import báo cáo từ Shopee/TikTok Shop).
+• Bảng xếp hạng: video nào, sản phẩm nào, tài khoản nào hiệu quả nhất.
+• Xuất báo cáo Excel/CSV.
+8. Thông báo và cảnh báo
+• [MVP] Báo lỗi qua Telegram hoặc email: đăng thất bại, token hết hạn.
+• Báo cáo tổng kết cuối ngày: đã đăng bao nhiêu bài, lỗi gì.
+• Cảnh báo khi tài khoản có dấu hiệu bị hạn chế (lượt xem giảm bất thường, API trả lỗi chính sách).
+• Cảnh báo kho video/caption sắp cạn.
+9. Giao diện quản lý (Dashboard)
+• [MVP] Trang tổng quan: trạng thái từng profile, bài sắp đăng, lỗi gần nhất.
+• Trang quản lý profile, video, sản phẩm, caption, lịch.
+• Xem trước bài đăng trước khi lên lịch.
+• Chạy được trên điện thoại (responsive).
+• Đăng nhập bằng mật khẩu, bật 2FA cho trang quản trị.
+10. Hạ tầng, bảo mật và vận hành
+• [MVP] CSDL SQLite (nâng lên PostgreSQL khi nhiều tài khoản).
+• [MVP] Mã hóa token và khóa API, không ghi vào log.
+• Hàng đợi tác vụ (Celery/RQ hoặc APScheduler) để chạy nền ổn định.
+• Docker hóa để triển khai lên VPS bằng một lệnh.
+• Sao lưu CSDL và thư mục video tự động.
+• Log chi tiết, xoay vòng log, giám sát tiến trình (tự khởi động lại khi crash).
+• Cập nhật tool khi API Facebook/TikTok đổi phiên bản.
+11. Tuân thủ và an toàn tài khoản
+• Giới hạn tần suất đăng theo quy định từng nền tảng.
+• Cảnh báo nội dung trùng lặp, từ khóa nhạy cảm, claim sai sự thật về sản phẩm.
+• Nhắc điều khoản: mỗi tài khoản phải tự cấp quyền cho app, chỉ dùng tài khoản của bạn hoặc được ủy quyền.
+Công nghệ đề xuất
+Python (FastAPI) + SQLite/PostgreSQL + APScheduler + FFmpeg + React hoặc giao diện web đơn giản + Docker. Gọi Facebook Graph API và TikTok Content Posting API.
+Lộ trình xây
+1. Giai đoạn 1 (MVP): profile + OAuth, kho video, sản phẩm + caption mẫu, lịch, đăng Facebook, nhật ký, báo lỗi Telegram.
+2. Giai đoạn 2: đăng TikTok (sau khi app được duyệt), dashboard đầy đủ, chạy song song nhiều profile.
+3. Giai đoạn 3: AI sinh caption, thống kê và link tracking, xử lý video bằng FFmpeg.
+4. Giai đoạn 4: phân quyền, Docker, sao lưu, báo cáo hiệu quả theo sản phẩm.
+Chức năng không có trong tool
+Tự like/follow/comment hàng loạt, đổi IP hoặc fingerprint để dùng nhiều tài khoản trên một máy. Đây là phần dễ làm tài khoản bị khóa nhất.
