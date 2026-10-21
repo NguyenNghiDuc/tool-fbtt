@@ -56,9 +56,35 @@ Môi trường hiện chưa có credentials và chưa cấp các host Facebook/T
 
 ## An toàn hàng đợi
 
-Bài mới cần duyệt mặc định. Lịch tự động vẫn chuyển sang chờ duyệt nếu có cảnh báo nội dung trùng/claim. Mặc định giới hạn 2 bài/ngày/profile, chỉnh tối đa 10 trong cấu hình lịch. Quy định/rate limit nền tảng có thể thấp hơn; HTTP 429 được thử lại có backoff, tối đa 3 lần. Lỗi kết nối chưa gửi yêu cầu có thể thử lại; lỗi không xác định sau khi gửi chuyển `uncertain`, không tự đăng lại. Sau crash, bài đang gửi cũng chuyển `uncertain`; cần kiểm tra trực tiếp trên nền tảng. Hiện chưa có UI đối soát để giải phóng trạng thái này.
+Bài mới cần duyệt mặc định. Lịch tự động vẫn chuyển sang chờ duyệt nếu có cảnh báo nội dung trùng/claim. Mặc định giới hạn 2 bài/ngày/profile, chỉnh tối đa 10 trong cấu hình lịch. Quy định/rate limit nền tảng có thể thấp hơn; HTTP 429 được thử lại có backoff, tối đa 3 lần. Lỗi kết nối chưa gửi yêu cầu có thể thử lại; lỗi không xác định sau khi gửi chuyển `uncertain`, không tự đăng lại. Sau crash, bài đang gửi cũng chuyển `uncertain`; cần kiểm tra trực tiếp trên nền tảng. Trong Hàng đợi, admin/người có quyền đăng có thể đối soát sau khi kiểm tra trực tiếp đúng tài khoản:
+
+- **Đã đăng:** nhập ID bài/video đã xác minh, xác nhận; ghi nhận thành công và đánh dấu video đã dùng. TikTok vẫn cần gắn Shop link thủ công.
+- **Chưa đăng:** xác nhận để đưa **chính bài đó** về chờ duyệt lại. Giữ video trong hàng đợi; không tự đăng lại, kể cả khi lịch không yêu cầu duyệt. Profile có thể xử lý bài khác sau đối soát.
+- Mỗi quyết định lưu người xác nhận, thời gian, lỗi/tham chiếu cũ và ID mới trong lịch sử đối soát. Chỉ đối soát `uncertain`; quyết định cũ gửi lại sẽ bị từ chối.
+
+TikTok ở `processing` quá `PROCESSING_TIMEOUT_SECONDS` (mặc định 1800 giây, cho phép 60–86400) chuyển sang `uncertain` và phát cảnh báo. Deadline vẫn được áp dụng khi tạm dừng hoặc tắt đăng thật, miễn vòng worker còn chạy. Hệ thống không kết luận video chưa đăng chỉ vì hết thời hạn; cần đối soát thủ công.
 
 Token/refresh token/2FA mã hóa Fernet, mật khẩu băm scrypt, session opaque băm SHA-256 trong DB, cookie HttpOnly/SameSite (Secure khi BASE_URL HTTPS), chống CSRF bằng header riêng, OAuth state dùng một lần gắn với người dùng và profile, rate limit đăng nhập, chống replay OTP, CSP và nội dung giao diện dùng textContent. API ghi cần header `X-Requested-With: FBTT`. Không bật HTTP debug/access log: callback chứa OAuth code.
+
+## Reverse proxy và chẩn đoán lỗi
+
+Giới hạn đăng nhập chỉ tin `X-Forwarded-For` nếu **IP TCP kết nối trực tiếp** thuộc `TRUSTED_PROXY_CIDRS`. Mặc định không tin proxy nào; header gửi từ client không được tin sẽ bị bỏ qua. Chuỗi proxy được đọc từ phải sang trái, dừng ở hop đầu tiên không tin cậy để bỏ các địa chỉ giả chèn ở đầu. Header lỗi/quá dài/trùng lặp sẽ dùng IP TCP thay thế.
+
+Nếu Nginx và ứng dụng chạy trực tiếp trên cùng VPS, có thể đặt `TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`. Khi dùng Docker, cấu hình đúng IP gateway/proxy mà container nhìn thấy, không suy đoán là loopback. Chỉ tin proxy bạn kiểm soát; không dùng wildcard hoặc toàn bộ Internet. Nginx phải ghi đè header bằng địa chỉ nó quan sát được, ví dụ:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 510m;
+}
+```
+
+Ứng dụng tự xác minh chuỗi proxy; Docker và `scripts/run.py` tắt việc Uvicorn tự sửa IP từ header trước đó. Nếu tự chạy Uvicorn, phải thêm `--no-proxy-headers`. Đặt `BASE_URL=https://...` để cookie Secure và OAuth redirect đúng HTTPS. Bộ đếm vẫn theo IP: người dùng cùng một NAT có thể chia sẻ giới hạn; đây không phải bộ chống brute-force phân tán.
+
+Maintenance chạy độc lập từng bước refresh token, scan inbox, publisher, operations và cleanup. Khi lỗi, nhật ký/console ghi **tên bước + loại lỗi được cho phép**, không ghi message/URL/request/locals hoặc token. Một bước lỗi không bỏ qua các bước sau; lỗi kho nhật ký cũng không làm chết vòng lặp. Ví dụ: `scan_inbox: PermissionError; retrying next cycle`.
 
 ## Sao lưu và khôi phục
 

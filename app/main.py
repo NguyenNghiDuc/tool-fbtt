@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -14,6 +15,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from .db import Database
+from .client_ip import ClientAddresses
+from .diagnostics import error_type
 from .providers import ProviderError, Providers
 from .security import check_password, digest, hash_password, random_token, verify_totp
 
@@ -44,6 +47,7 @@ def create_app(settings=None, transport=None, background=True):
     cfg.setdefault('DATA_DIR', 'data')
     cfg.setdefault('BASE_URL', 'http://localhost:8000')
     cfg.setdefault('FACEBOOK_API_VERSION', 'v25.0')
+    client_addresses = ClientAddresses(cfg.get('TRUSTED_PROXY_CIDRS', ''))
     if len(cfg.get('ADMIN_PASSWORD', '')) < 12:
         raise RuntimeError('Set ADMIN_PASSWORD (at least 12 characters)')
     if not cfg.get('ENCRYPTION_KEY'):
@@ -97,23 +101,45 @@ def create_app(settings=None, transport=None, background=True):
                 db.execute("UPDATE profiles SET token_status='error' WHERE id=?", (p['id'],))
                 event('token_warning', p['id'], 'invalid_provider_response')
 
-    async def maintenance():
-        refreshed_at = 0
-        while True:
+    refreshed_at = 0
+
+    def maintenance_error(stage, exc):
+        message = f'{stage}: {error_type(exc)}; retrying next cycle'
+        logger = logging.getLogger('fbtt.maintenance')
+        logger.error('%s', message)
+        try:
+            event('maintenance_error', None, message)
+        except Exception as storage_error:
+            # Keep the task alive even when the event database itself is unavailable.
+            logger.error('event_store: %s', error_type(storage_error))
+
+    async def maintenance_cycle():
+        nonlocal refreshed_at
+        # Each stage is independent: a broken input file must not stop publishing or alerts.
+        stages = [('refresh_tokens', 'refresh_tokens'), ('scan_inbox', 'scan_inbox'),
+                  ('publisher', 'tick'), ('operations', 'operations_tick')]
+        for stage, attribute in stages:
+            if stage == 'refresh_tokens' and time.time() - refreshed_at <= 300:
+                continue
+            callback = getattr(app.state, attribute, None)
+            if callback is None:
+                continue
             try:
-                if time.time() - refreshed_at > 300:
-                    await refresh_tokens()
+                await callback()
+                if stage == 'refresh_tokens':
                     refreshed_at = time.time()
-                if hasattr(app.state, "scan_inbox"):
-                    await app.state.scan_inbox()
-                if hasattr(app.state, "tick"):
-                    await app.state.tick()
-                if hasattr(app.state, "operations_tick"):
-                    await app.state.operations_tick()
-            except Exception:
-                event("maintenance_error", None, "Maintenance failed; retrying next cycle")
-            db.execute('DELETE FROM sessions WHERE expires<?', (int(time.time()),))
-            db.execute('DELETE FROM oauth_states WHERE expires<?', (int(time.time()),))
+            except Exception as exc:
+                maintenance_error(stage, exc)
+        try:
+            with db.connect() as conn:
+                conn.execute('DELETE FROM sessions WHERE expires<?', (int(time.time()),))
+                conn.execute('DELETE FROM oauth_states WHERE expires<?', (int(time.time()),))
+        except Exception as exc:
+            maintenance_error('cleanup', exc)
+
+    async def maintenance():
+        while True:
+            await maintenance_cycle()
             await asyncio.sleep(15)
 
     @asynccontextmanager
@@ -128,6 +154,7 @@ def create_app(settings=None, transport=None, background=True):
     app = FastAPI(title='FBTT Manager', lifespan=lifespan)
     app.state.db, app.state.cipher, app.state.providers = db, cipher, providers
     app.state.refresh_tokens = refresh_tokens
+    app.state.maintenance_cycle = maintenance_cycle
     app.state.cfg = cfg
 
     @app.middleware('http')
@@ -177,7 +204,7 @@ def create_app(settings=None, transport=None, background=True):
 
     @app.post('/api/login')
     def login(body: Login, request: Request, response: Response):
-        key = request.client.host if request.client else 'local'
+        key = client_addresses.ip(request)
         now = time.time()
         failures = [t for t in attempts.get(key, []) if now - t < 300]
         attempts[key] = failures

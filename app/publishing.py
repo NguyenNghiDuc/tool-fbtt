@@ -18,6 +18,14 @@ def install(app, db, cfg, current_user, admin, publisher, get_profile, get_media
         columns = {r['name'] for r in conn.execute('PRAGMA table_info(jobs)')}
         if 'started' not in columns:
             conn.execute('ALTER TABLE jobs ADD COLUMN started INTEGER')
+        if 'processing_since' not in columns:
+            conn.execute('ALTER TABLE jobs ADD COLUMN processing_since INTEGER')
+            conn.execute("UPDATE jobs SET processing_since=COALESCE(started,created) WHERE status='processing'")
+    processing_timeout = int(cfg.get('PROCESSING_TIMEOUT_SECONDS', '1800'))
+    if not 60 <= processing_timeout <= 86400:
+        raise RuntimeError('PROCESSING_TIMEOUT_SECONDS must be between 60 and 86400')
+    from .reconciliation import install as reconciliation
+    reconciliation(app, db, publisher)
     semaphore = asyncio.Semaphore(4)
     tick_lock = asyncio.Lock()
     async def call(method, url, **kwargs):
@@ -43,10 +51,13 @@ def install(app, db, cfg, current_user, admin, publisher, get_profile, get_media
             raise PublishError('network_connect_failed', retry=True) from None
         except (httpx.HTTPError, ValueError):
             raise PublishError('network_outcome_unknown', uncertain=method != 'GET', retry=method == 'GET') from None
-    def finish(job, remote):
+    def finish(job, remote, expected='publishing'):
         status = 'manual_link' if get_profile(job['profile_id'])['platform'] == 'tiktok' else 'success'
         with db.connect() as conn:
-            conn.execute('UPDATE jobs SET status=?,remote_id=?,error=NULL WHERE id=?', (status, remote, job['id']))
+            changed = conn.execute('''UPDATE jobs SET status=?,remote_id=?,error=NULL,processing_since=NULL
+                WHERE id=? AND status=?''', (status, remote, job['id'], expected)).rowcount
+            if not changed:
+                return
             conn.execute('UPDATE assignments SET used=1 WHERE media_id=? AND profile_id=?', (job['media_id'], job['profile_id']))
         event('publish_success', job['profile_id'], f'Job {job["id"]}: {status}')
     async def send(job):
@@ -100,7 +111,8 @@ def install(app, db, cfg, current_user, admin, publisher, get_profile, get_media
             content = video.read()
         await call('PUT', upload_url, content=content, headers={'Content-Type': 'video/mp4',
             'Content-Length': str(size), 'Content-Range': f'bytes 0-{size-1}/{size}'})
-        db.execute("UPDATE jobs SET status='processing' WHERE id=?", (job['id'],))
+        db.execute("UPDATE jobs SET status='processing',processing_since=? WHERE id=? AND status='publishing'",
+                   (int(time.time()), job['id']))
         event('publish_processing', p['id'], f'Job {job["id"]}: awaiting TikTok processing')
     async def run_one(job):
         async with semaphore:
@@ -125,6 +137,17 @@ def install(app, db, cfg, current_user, admin, publisher, get_profile, get_media
                 # Never expose SDK messages, which can contain request URLs or tokens.
                 db.execute("UPDATE jobs SET status='uncertain',error='internal_error_check_platform' WHERE id=?", (job['id'],))
                 event('publish_error', job['profile_id'], f'Job {job["id"]}: internal_error_check_platform')
+    def expire_processing():
+        now = int(time.time())
+        with db.connect() as conn:
+            expired = conn.execute('''UPDATE jobs SET status='uncertain',error='processing_timeout_check_platform'
+                WHERE status='processing' AND COALESCE(processing_since,started,created)<=?
+                RETURNING id,profile_id''', (now - processing_timeout,)).fetchall()
+            for job in expired:
+                conn.execute('INSERT INTO events(kind,profile_id,message,created) VALUES (?,?,?,?)',
+                    ('publish_error', job['profile_id'],
+                     f'Job {job["id"]}: processing_timeout_check_platform; uncertain', now))
+
     async def poll():
         for job in db.query("SELECT * FROM jobs WHERE status='processing'"):
             p = get_profile(job['profile_id'])
@@ -134,13 +157,22 @@ def install(app, db, cfg, current_user, admin, publisher, get_profile, get_media
                     headers={'Authorization': 'Bearer ' + token}, json={'publish_id': job['remote_id']})
                 state = data.get('data', {}).get('status')
                 if state == 'PUBLISH_COMPLETE':
-                    finish(job, job['remote_id'])
+                    finish(job, job['remote_id'], expected='processing')
                 elif state == 'FAILED':
-                    db.execute("UPDATE jobs SET status='failed',error='tiktok_processing_failed' WHERE id=?", (job['id'],))
+                    db.execute("UPDATE jobs SET status='failed',error='tiktok_processing_failed' WHERE id=? AND status='processing'", (job['id'],))
                     event('publish_error', job['profile_id'], f'Job {job["id"]}: tiktok_processing_failed')
-            except PublishError:
+            except PublishError as exc:
                 # Polling is read-only and can safely resume at the next tick.
+                db.execute("UPDATE jobs SET error=? WHERE id=? AND status='processing'", (exc.code, job['id']))
+                if job['error'] != exc.code:
+                    event('publish_error', job['profile_id'], f'Job {job["id"]}: status_poll_{exc.code}')
                 continue
+            except Exception as exc:
+                from .diagnostics import error_type
+                code = 'status_poll_' + error_type(exc)
+                db.execute("UPDATE jobs SET error=? WHERE id=? AND status='processing'", (code, job['id']))
+                if job['error'] != code:
+                    event('publish_error', job['profile_id'], f'Job {job["id"]}: {code}')
     def claim(now):
         claimed = []
         with db.connect() as conn:
@@ -168,6 +200,8 @@ def install(app, db, cfg, current_user, admin, publisher, get_profile, get_media
         if tick_lock.locked():
             return {'busy': True}
         async with tick_lock:
+            # A deadline remains effective even with publishing disabled or the system paused.
+            expire_processing()
             app.state.plan()
             if cfg.get('PUBLISH_ENABLED', 'false').lower() != 'true':
                 return {'enabled': False, 'claimed': 0}
@@ -186,5 +220,6 @@ def install(app, db, cfg, current_user, admin, publisher, get_profile, get_media
         return {'ok': True}
     app.state.tick = tick
     app.state.claim = claim
+    app.state.expire_processing = expire_processing
     from .operations import install as operations
     operations(app, db, cfg, current_user, admin, publisher, get_profile, get_media, event)

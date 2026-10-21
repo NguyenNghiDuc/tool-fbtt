@@ -12,4 +12,5 @@ if (root / '.env').exists():
         if line.strip() and not line.lstrip().startswith('#'):
             key, value = line.split('=', 1)
             os.environ.setdefault(key.strip(), value.strip())
-uvicorn.run('app.main:create_app', factory=True, host='127.0.0.1', port=8000, workers=1, access_log=False)
+uvicorn.run('app.main:create_app', factory=True, host='127.0.0.1', port=8000, workers=1,
+            access_log=False, proxy_headers=False)

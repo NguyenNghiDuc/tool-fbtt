@@ -73,6 +73,19 @@ async function refresh() {
     if(j.status==='pending')button(el,'Duyệt đăng',async()=>{const review=await api(`/api/jobs/${j.id}/review`);if(review.requires_acknowledgment&&!confirm(review.warnings.join('\n')+'\nBạn đã kiểm tra và xác nhận nội dung?'))return;await api(`/api/jobs/${j.id}/approve`,{acknowledged:true});await refresh();});
     if(['pending','queued'].includes(j.status))button(el,'Hủy',async()=>{await api(`/api/jobs/${j.id}/cancel`,{});await refresh();},'danger');
     if(j.status==='manual_link')button(el,'Đã gắn Shop link',async()=>{await api(`/api/jobs/${j.id}/shop-linked`,{});await refresh();});
+    if(j.status==='processing')line(el,'Đang chờ nền tảng xử lý. Quá thời hạn sẽ chuyển sang cần đối soát; không tự đăng lại.');
+    if(j.status==='uncertain'){
+      line(el,'Mở đúng tài khoản trên nền tảng và kiểm tra bài trước khi xác nhận. Chọn chưa đăng sẽ đưa bài về chờ duyệt, không gửi lại ngay.');
+      const form=node('form',undefined,'fields');form.dataset.resolveJob=String(j.id);
+      const outcomeLabel=node('label','Kết quả kiểm tra');const outcome=node('select');outcome.name='outcome';outcome.required=true;
+      for(const [value,text] of [['','Chọn kết quả'],['published','Đã kiểm tra: đã đăng'],['not_published','Đã kiểm tra: chưa đăng']]){const option=node('option',text);option.value=value;outcome.append(option);}outcomeLabel.append(outcome);
+      const remoteLabel=node('label','ID bài/video đã kiểm tra');const remote=node('input');remote.name='remote_id';remote.maxLength=200;remoteLabel.append(remote);remoteLabel.hidden=true;
+      outcome.addEventListener('change',()=>{remote.required=outcome.value==='published';remoteLabel.hidden=outcome.value!=='published';});
+      const confirmedLabel=node('label','Tôi đã kiểm tra trực tiếp trên nền tảng');const confirmed=node('input');confirmed.type='checkbox';confirmed.name='confirmed';confirmed.required=true;confirmedLabel.prepend(confirmed);
+      const submit=node('button','Lưu đối soát');submit.type='submit';form.append(outcomeLabel,remoteLabel,confirmedLabel,submit);
+      form.addEventListener('submit',async e=>{e.preventDefault();submit.disabled=true;try{const body={outcome:outcome.value,confirmed:confirmed.checked};if(outcome.value==='published')body.remote_id=remote.value.trim();await api(`/api/jobs/${j.id}/resolve`,body);toast(outcome.value==='published'?'Đã ghi nhận bài đã đăng':'Đã đưa về chờ duyệt lại');await refresh();}catch(err){toast(err.message);}finally{submit.disabled=false;}});el.append(form);
+    }
+    button(el,'Lịch sử đối soát',async()=>{const history=await api(`/api/jobs/${j.id}/resolutions`);if(!history.length)line(el,'Chưa có đối soát.');for(const r of history)line(el,`${date(r.created)} · ${r.username} · ${r.outcome==='published'?'Đã đăng':'Chưa đăng'}`);});
   }return el;});
   list('#event-list',data.events,e=>{const el=node('article');el.append(node('span',e.kind,'badge'));line(el,e.message);line(el,`${date(e.created)} · ${e.profile_id?profileName(e.profile_id):'Hệ thống'}`);return el;});
   rights();tab(activeTab);
