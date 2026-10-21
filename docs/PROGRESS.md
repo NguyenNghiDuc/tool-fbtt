@@ -12,14 +12,15 @@ Ngày 21/10/2026 (giờ Việt Nam). Phân biệt rõ: **đã triển khai + tes
 | 6. Publisher | Adapter Facebook video và TikTok riêng tư; worker async tối đa 4, khóa theo profile, lỗi tách biệt, backoff tối đa 3, polling TikTok, manual Shop link, trạng thái uncertain, UI đối soát có audit, processing deadline | 7 test publisher + 11 test đối soát | Tất cả HTTP test dùng mock; chưa gửi thật; chưa Reels chuyên biệt; TikTok audit UX/disclosure và upload chia chunk lớn |
 | 7. Thống kê | Nhật ký, tổng hợp trạng thái/profile, ranking doanh thu/hoa hồng sản phẩm từ đơn nhập tay, CSV tránh formula injection, click tracking, chống nhập trùng đơn | 2 test operations | API views/likes/comments/shares; phân tích ngách/giờ; báo cáo nhập nền tảng; Excel |
 | 8. Thông báo | Outbox bền trong SQLite, trigger lỗi/token/hết kho, Telegram hoặc SMTP STARTTLS, retry giới hạn, tổng kết cuối ngày | 1 test outbox mô phỏng Telegram | Telegram/email thật; test SMTP thật; phát hiện giảm view/hạn chế; cảnh báo caption sắp cạn; tổng kết bù nếu app tắt lúc 23h |
-| 9. Dashboard | 9 trang tiếng Việt, responsive, profile/media/products/captions/schedules/jobs/log/settings, preview/approve, đăng nhập, phân quyền và TOTP | 2 test dashboard + 1 luồng Chromium desktop/mobile | Chưa có calendar kéo thả; chưa có UI toàn bộ tracking/orders; chưa có mã khôi phục 2FA |
+| 9. Dashboard | 9 trang tiếng Việt được thiết kế lại, sidebar tối và dashboard sáng, drawer trên mobile, upload kéo thả, profile/media/products/captions/schedules/jobs/log/settings, preview/approve, đăng nhập, phân quyền và TOTP | 2 test dashboard + 1 luồng Chromium desktop/mobile | Chưa có calendar kéo thả; chưa có UI toàn bộ tracking/orders; chưa có mã khôi phục 2FA |
 | 10. Vận hành | SQLite WAL/FK/unique indexes, mã hóa, session/cookie/CSRF, Docker non-root, compose restart/log rotation, sao lưu snapshot+video thủ công/tự động | 1 test backup + Docker smoke | PostgreSQL/migration phân tán, retention/offsite, restore DR test, giám sát ngoài tiến trình và quy trình cập nhật API |
 | 11. Tuân thủ | Rate/daily cap, nội dung trùng, cảnh báo claim theo từ khóa, bắt xác nhận cảnh báo, nhắc quyền ủy quyền; không có like/follow/IP/fingerprint automation | 2 test compliance | Bộ từ khóa cần mở rộng; không thay thế kiểm duyệt hoặc bảo đảm được nền tảng duyệt |
 
 ## Bằng chứng kiểm thử
 
 - 49 test API/service độc lập (không đếm lặp test kế thừa). Mỗi nhóm có lệnh `python -m unittest tests.test_<nhóm> -v`.
-- Chromium: login → profile → product → caption → upload video thật → gán → tạo bài → duyệt → đối soát cả hai nhánh và lịch sử → pause → mobile 390px không tràn ngang → logout; không lỗi JavaScript.
+- Chromium: login → profile → product → caption → upload video thật → gán → tạo bài → duyệt → đối soát cả hai nhánh và lịch sử → pause → toàn bộ 9 trang ở 1440/390/320px không tràn ngang → logout; không lỗi JavaScript.
+- Thiết kế mới và kiểm thử giao diện: [UI_REDESIGN.md](UI_REDESIGN.md).
 - Ảnh kiểm thử: [desktop](evidence/desktop.png) và [mobile](evidence/mobile.png) (dữ liệu giả).
 - Docker: build thật với proxy CA; smoke test kiểm tra UID không phải root, SQLite khởi tạo, health và giao diện. Xem kết quả cuối trong `docs/TEST_RESULTS.txt`.
 - Các nền tảng, OAuth, Telegram dùng phản hồi giả lập trong test; không được xem là kiểm thử end-to-end với dịch vụ thật.

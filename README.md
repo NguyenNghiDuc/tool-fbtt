@@ -2,6 +2,14 @@
 
 Ứng dụng quản lý video Facebook Fanpage/TikTok bằng FastAPI, SQLite, FFmpeg và giao diện web tiếng Việt. Đây là bản triển khai MVP có kiểm thử nội bộ; kết nối nền tảng thật cần cấu hình ứng dụng và kiểm duyệt API. Chi tiết từng mục và phần còn thiếu ở [báo cáo](docs/PROGRESS.md).
 
+## Giao diện Studio
+
+Giao diện được thiết kế lại với sidebar tối, vùng nội dung sáng, màu xanh dương chủ đạo, icon SVG nội bộ và bố cục riêng cho điện thoại. Dashboard hiển thị thống kê thực, bài sắp đăng, dòng hoạt động và phân bố hàng đợi. Có vùng kéo thả video, hiện/ẩn mật khẩu, menu drawer hỗ trợ bàn phím và trạng thái focus/reduced-motion.
+
+[Dashboard](docs/evidence/desktop.png) · [Đăng nhập](docs/evidence/login-desktop.png) · [Giao diện điện thoại](docs/evidence/mobile.png)
+
+Khi cập nhật bản đã tải về, giữ nguyên `.env` và `data`, thay mã nguồn bằng bản mới, khởi động lại và nhấn **Ctrl+F5** trong trình duyệt. Không cần tạo lại tài khoản hoặc khóa mã hóa cho thay đổi giao diện này.
+
 ## Chạy trên máy
 
 Yêu cầu Python 3.12+, FFmpeg/ffprobe có trong PATH.
